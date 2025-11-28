@@ -1,5 +1,5 @@
 {
-  "name": "airep-ai-service",
+  "name": "salud-plus-api",
   "version": "1.0.0",
   "description": "AI service for Salud+ health guidance and recommendations",
   "main": "server.js",

@@ -19,6 +19,275 @@ if (!GEMINI_API_KEY) {
 }
 
 // ---------------------------
+// VALIDATION UTILITIES
+// ---------------------------
+function validateString(value, fieldName, minLength = 1, maxLength = 500) {
+    if (typeof value !== 'string') {
+        throw new Error(`${fieldName} must be a string`);
+    }
+    const trimmed = value.trim();
+    if (trimmed.length < minLength) {
+        throw new Error(`${fieldName} must be at least ${minLength} character(s)`);
+    }
+    if (trimmed.length > maxLength) {
+        throw new Error(`${fieldName} must not exceed ${maxLength} characters`);
+    }
+    return trimmed;
+}
+
+function validateNumber(value, fieldName, min = null, max = null) {
+    const num = Number(value);
+    if (isNaN(num)) {
+        throw new Error(`${fieldName} must be a valid number`);
+    }
+    if (min !== null && num < min) {
+        throw new Error(`${fieldName} must be at least ${min}`);
+    }
+    if (max !== null && num > max) {
+        throw new Error(`${fieldName} must not exceed ${max}`);
+    }
+    return num;
+}
+
+function validateArray(value, fieldName, maxLength = 100) {
+    if (!Array.isArray(value)) {
+        throw new Error(`${fieldName} must be an array`);
+    }
+    if (value.length > maxLength) {
+        throw new Error(`${fieldName} cannot contain more than ${maxLength} items`);
+    }
+    // Validate each item is a string
+    return value.map((item, index) => {
+        if (typeof item !== 'string') {
+            throw new Error(`${fieldName}[${index}] must be a string`);
+        }
+        return item.trim();
+    });
+}
+
+function validateHealthData(userData) {
+    const errors = [];
+
+    // Validate required fields
+    if (!userData.name) {
+        errors.push('name is required');
+    } else {
+        try {
+            userData.name = validateString(userData.name, 'name', 1, 100);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.age === undefined || userData.age === null || userData.age === '') {
+        errors.push('age is required');
+    } else {
+        try {
+            userData.age = validateNumber(userData.age, 'age', 1, 150);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (!userData.weight) {
+        errors.push('weight is required');
+    } else {
+        try {
+            userData.weight = validateString(userData.weight, 'weight', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (!userData.height) {
+        errors.push('height is required');
+    } else {
+        try {
+            userData.height = validateString(userData.height, 'height', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    // Validate optional fields
+    if (userData.conditions) {
+        try {
+            userData.conditions = validateArray(userData.conditions, 'conditions', 20);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    } else {
+        userData.conditions = [];
+    }
+
+    if (userData.otherCondition) {
+        try {
+            userData.otherCondition = validateString(userData.otherCondition, 'otherCondition', 0, 200);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    } else {
+        userData.otherCondition = '';
+    }
+
+    if (userData.additionalInfo) {
+        try {
+            userData.additionalInfo = validateString(userData.additionalInfo, 'additionalInfo', 0, 1000);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    } else {
+        userData.additionalInfo = '';
+    }
+
+    if (errors.length > 0) {
+        throw new Error(`Validation failed: ${errors.join('; ')}`);
+    }
+
+    return userData;
+}
+
+function validateWorkoutData(userData) {
+    const errors = [];
+
+    // Require at least name for workout recommendations
+    if (!userData.name) {
+        errors.push('name is required');
+    } else {
+        try {
+            userData.name = validateString(userData.name, 'name', 1, 100);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.age !== undefined && userData.age !== null && userData.age !== '') {
+        try {
+            userData.age = validateNumber(userData.age, 'age', 1, 150);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.weight) {
+        try {
+            userData.weight = validateString(userData.weight, 'weight', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.height) {
+        try {
+            userData.height = validateString(userData.height, 'height', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.fitnessLevel) {
+        try {
+            userData.fitnessLevel = validateString(userData.fitnessLevel, 'fitnessLevel', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.goals) {
+        try {
+            userData.goals = validateString(userData.goals, 'goals', 1, 500);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.limitations) {
+        try {
+            userData.limitations = validateString(userData.limitations, 'limitations', 1, 500);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (errors.length > 0) {
+        throw new Error(`Validation failed: ${errors.join('; ')}`);
+    }
+
+    return userData;
+}
+
+function validateNutritionData(userData) {
+    const errors = [];
+
+    // Require at least name for nutrition recommendations
+    if (!userData.name) {
+        errors.push('name is required');
+    } else {
+        try {
+            userData.name = validateString(userData.name, 'name', 1, 100);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.age !== undefined && userData.age !== null && userData.age !== '') {
+        try {
+            userData.age = validateNumber(userData.age, 'age', 1, 150);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.weight) {
+        try {
+            userData.weight = validateString(userData.weight, 'weight', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.height) {
+        try {
+            userData.height = validateString(userData.height, 'height', 1, 50);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.dietaryPreferences) {
+        try {
+            userData.dietaryPreferences = validateString(userData.dietaryPreferences, 'dietaryPreferences', 1, 200);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (userData.conditions) {
+        try {
+            userData.conditions = validateArray(userData.conditions, 'conditions', 20);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    } else {
+        userData.conditions = [];
+    }
+
+    if (userData.nutritionGoals) {
+        try {
+            userData.nutritionGoals = validateString(userData.nutritionGoals, 'nutritionGoals', 1, 500);
+        } catch (err) {
+            errors.push(err.message);
+        }
+    }
+
+    if (errors.length > 0) {
+        throw new Error(`Validation failed: ${errors.join('; ')}`);
+    }
+
+    return userData;
+}
+
+// ---------------------------
 // UTILITY: CALL GEMINI API
 // ---------------------------
 async function callGeminiAPI(prompt) {
@@ -68,28 +337,23 @@ app.post('/api/generateHealth', async (req, res) => {
         if (!userData) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Missing userData' 
+                error: 'Missing userData object' 
             });
         }
 
-        // Validate required fields
-        if (!userData.name || !userData.age || !userData.weight || !userData.height) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Missing required fields: name, age, weight, height' 
-            });
-        }
+        // Validate and sanitize input
+        const validatedData = validateHealthData(userData);
 
         const prompt = `You are a friendly health and wellness advisor (NOT a medical doctor). Based on the following user information, provide personalized, non-medical but science-based health and wellness suggestions.
 
 User Health Information:
-- Full Name: ${userData.name}
-- Age: ${userData.age}
-- Weight: ${userData.weight}
-- Height: ${userData.height}
-- Existing Conditions: ${userData.conditions && userData.conditions.length > 0 ? userData.conditions.join(", ") : "None selected"}
-${userData.otherCondition ? "- Other Condition: " + userData.otherCondition : ""}
-${userData.additionalInfo ? "- Additional Notes: " + userData.additionalInfo : ""}
+- Full Name: ${validatedData.name}
+- Age: ${validatedData.age}
+- Weight: ${validatedData.weight}
+- Height: ${validatedData.height}
+- Existing Conditions: ${validatedData.conditions && validatedData.conditions.length > 0 ? validatedData.conditions.join(", ") : "None selected"}
+${validatedData.otherCondition ? "- Other Condition: " + validatedData.otherCondition : ""}
+${validatedData.additionalInfo ? "- Additional Notes: " + validatedData.additionalInfo : ""}
 
 Please provide friendly wellness suggestions in these areas:
 1. **General Wellness Overview** - What positive health habits to focus on
@@ -110,9 +374,10 @@ Keep the tone friendly, encouraging, and supportive. Focus on general wellness, 
 
     } catch (err) {
         console.error("Error in /api/generateHealth:", err);
-        res.status(500).json({ 
+        const statusCode = err.message.includes('Validation failed') ? 400 : 500;
+        res.status(statusCode).json({ 
             success: false,
-            error: `Server error: ${err.message}` 
+            error: err.message 
         });
     }
 });
@@ -127,20 +392,23 @@ app.post('/api/generateWorkout', async (req, res) => {
         if (!userData) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Missing userData' 
+                error: 'Missing userData object' 
             });
         }
+
+        // Validate and sanitize input
+        const validatedData = validateWorkoutData(userData);
 
         const prompt = `You are a friendly fitness advisor. Based on the user's profile, suggest personalized workout recommendations.
 
 User Profile:
-- Name: ${userData.name}
-- Age: ${userData.age}
-- Weight: ${userData.weight}
-- Height: ${userData.height}
-- Fitness Level: ${userData.fitnessLevel || "Not specified"}
-- Goals: ${userData.goals || "General fitness"}
-- Limitations: ${userData.limitations || "None"}
+- Name: ${validatedData.name}
+- Age: ${validatedData.age || "Not specified"}
+- Weight: ${validatedData.weight || "Not specified"}
+- Height: ${validatedData.height || "Not specified"}
+- Fitness Level: ${validatedData.fitnessLevel || "Not specified"}
+- Goals: ${validatedData.goals || "General fitness"}
+- Limitations: ${validatedData.limitations || "None"}
 
 Please provide:
 1. **Recommended Workout Types** - Best suited to their profile
@@ -161,9 +429,10 @@ Keep it encouraging and realistic for their fitness level.`;
 
     } catch (err) {
         console.error("Error in /api/generateWorkout:", err);
-        res.status(500).json({ 
+        const statusCode = err.message.includes('Validation failed') ? 400 : 500;
+        res.status(statusCode).json({ 
             success: false,
-            error: `Server error: ${err.message}` 
+            error: err.message 
         });
     }
 });
@@ -178,20 +447,23 @@ app.post('/api/generateNutrition', async (req, res) => {
         if (!userData) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Missing userData' 
+                error: 'Missing userData object' 
             });
         }
+
+        // Validate and sanitize input
+        const validatedData = validateNutritionData(userData);
 
         const prompt = `You are a friendly nutrition advisor. Based on the user's profile, provide personalized nutrition guidance.
 
 User Profile:
-- Name: ${userData.name}
-- Age: ${userData.age}
-- Weight: ${userData.weight}
-- Height: ${userData.height}
-- Dietary Preferences: ${userData.dietaryPreferences || "No preference"}
-- Health Conditions: ${userData.conditions ? userData.conditions.join(", ") : "None"}
-- Goals: ${userData.nutritionGoals || "General health"}
+- Name: ${validatedData.name}
+- Age: ${validatedData.age || "Not specified"}
+- Weight: ${validatedData.weight || "Not specified"}
+- Height: ${validatedData.height || "Not specified"}
+- Dietary Preferences: ${validatedData.dietaryPreferences || "No preference"}
+- Health Conditions: ${validatedData.conditions && validatedData.conditions.length > 0 ? validatedData.conditions.join(", ") : "None"}
+- Goals: ${validatedData.nutritionGoals || "General health"}
 
 Please provide:
 1. **Daily Nutrition Overview** - Recommended caloric and macro breakdown
@@ -212,9 +484,10 @@ Keep recommendations practical, accessible, and non-medical.`;
 
     } catch (err) {
         console.error("Error in /api/generateNutrition:", err);
-        res.status(500).json({ 
+        const statusCode = err.message.includes('Validation failed') ? 400 : 500;
+        res.status(statusCode).json({ 
             success: false,
-            error: `Server error: ${err.message}` 
+            error: err.message 
         });
     }
 });
@@ -225,7 +498,7 @@ Keep recommendations practical, accessible, and non-medical.`;
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
-        service: 'AIrep AI Service',
+        service: 'SaludPlusAPI',
         timestamp: new Date().toISOString()
     });
 });
@@ -245,6 +518,6 @@ app.use((err, req, res, next) => {
 // START SERVER
 // ---------------------------
 app.listen(PORT, () => {
-    console.log(`✅ AIrep service running on http://localhost:${PORT}`);
+    console.log(`✅ SaludPlusAPI service running on http://localhost:${PORT}`);
     console.log(`📝 Make sure your .env file has GEMINI_API_KEY set`);
 });
