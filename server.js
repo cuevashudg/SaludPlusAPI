@@ -3,6 +3,10 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
+import connectDB from './utils/db.js';
+import authMiddleware from './middleware/auth.js';
+import authRoutes from './routes/auth.js';
+import plansRoutes from './routes/plans.js';
 
 dotenv.config();
 
@@ -10,6 +14,16 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Connect to database
+let dbConnected = false;
+connectDB().then(() => {
+  dbConnected = true;
+  console.log('✅ Database integration enabled');
+}).catch(err => {
+  console.warn('⚠️ Database connection failed:', err.message);
+  dbConnected = false;
+});
 
 // Initialize cache (1 hour TTL for wellness advice)
 const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
@@ -41,6 +55,16 @@ const apiLimiter = rateLimit({
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// ---------------------------
+// AUTHENTICATION & ACCOUNT ROUTES
+// ---------------------------
+app.use('/api/auth', authRoutes);
+
+// ---------------------------
+// HEALTH PLANS ROUTES (Protected)
+// ---------------------------
+app.use('/api/plans', plansRoutes);
 
 // ---------------------------
 // ERROR MESSAGE MAPPING
