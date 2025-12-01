@@ -349,6 +349,7 @@ async function callGeminiAPI(prompt) {
     const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     try {
+        console.log('Calling Gemini API...');
         const response = await fetch(url, {
             method: "POST",
             headers: {
@@ -386,7 +387,11 @@ async function callGeminiAPI(prompt) {
             console.error("Gemini API request timeout");
             throw new Error('Gemini API request timeout (30 seconds). Please try again.');
         }
-        console.error("Gemini API call failed:", err);
+        console.error("Gemini API call failed:", err.message || err);
+        // Check if it's a network error
+        if (err.message.includes('fetch failed') || err.message.includes('network')) {
+            throw new Error('Network error: Unable to reach Gemini API. Check your internet connection and API key.');
+        }
         throw err;
     }
 }
@@ -615,11 +620,42 @@ app.get('/health', (req, res) => {
         timestamp: new Date().toISOString(),
         checks: {
             geminiApiKey: !!GEMINI_API_KEY,
+            geminiApiKeyLength: GEMINI_API_KEY ? GEMINI_API_KEY.length : 0,
             environment: NODE_ENV,
             cacheStatus: 'ok'
         }
     };
     res.json(checks);
+});
+
+// ---------------------------
+// DIAGNOSTIC ENDPOINT
+// ---------------------------
+app.post('/api/test-gemini', async (req, res) => {
+    try {
+        if (!GEMINI_API_KEY) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'GEMINI_API_KEY not configured in .env file' 
+            });
+        }
+
+        const testPrompt = 'Say "Hello, Gemini API is working!" in one sentence.';
+        const response = await callGeminiAPI(testPrompt);
+        
+        res.json({ 
+            success: true, 
+            message: 'Gemini API is working correctly',
+            response: response
+        });
+    } catch (err) {
+        console.error("Gemini test failed:", err);
+        res.status(500).json({ 
+            success: false,
+            error: err.message,
+            tip: 'Check your GEMINI_API_KEY in .env file and ensure you have internet connectivity'
+        });
+    }
 });
 
 // ---------------------------
