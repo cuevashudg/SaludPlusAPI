@@ -36,6 +36,10 @@ const HealthPlanSchema = new mongoose.Schema({
     default: null
   },
   userFeedback: String,
+  userNotes: {
+    type: String,
+    default: ''
+  },
   actionItems: [
     {
       title: String,
