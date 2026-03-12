@@ -28,6 +28,41 @@ connectDB().then(() => {
 // Initialize cache (1 hour TTL for wellness advice)
 const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
+// In-memory request metrics for local diagnostics
+const requestMetrics = {
+    startedAt: new Date().toISOString(),
+    totalRequests: 0,
+    byMethod: {},
+    byPath: {},
+    responseClasses: {
+        '2xx': 0,
+        '3xx': 0,
+        '4xx': 0,
+        '5xx': 0
+    },
+    aiEndpoints: {
+        generateHealth: 0,
+        generateWorkout: 0,
+        generateNutrition: 0,
+        testGemini: 0
+    },
+    recentRequests: []
+};
+
+function getResponseClass(statusCode) {
+    if (statusCode >= 200 && statusCode < 300) return '2xx';
+    if (statusCode >= 300 && statusCode < 400) return '3xx';
+    if (statusCode >= 400 && statusCode < 500) return '4xx';
+    return '5xx';
+}
+
+function trackRecentRequest(entry) {
+    requestMetrics.recentRequests.push(entry);
+    if (requestMetrics.recentRequests.length > 30) {
+        requestMetrics.recentRequests.shift();
+    }
+}
+
 // Validate environment on startup
 function validateEnvironment() {
     if (!GEMINI_API_KEY) {
@@ -55,6 +90,39 @@ const apiLimiter = rateLimit({
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+app.use((req, res, next) => {
+    const startTime = Date.now();
+    const method = req.method;
+    const path = req.path;
+
+    requestMetrics.totalRequests += 1;
+    requestMetrics.byMethod[method] = (requestMetrics.byMethod[method] || 0) + 1;
+    requestMetrics.byPath[path] = (requestMetrics.byPath[path] || 0) + 1;
+
+    if (path === '/api/generateHealth') requestMetrics.aiEndpoints.generateHealth += 1;
+    if (path === '/api/generateWorkout') requestMetrics.aiEndpoints.generateWorkout += 1;
+    if (path === '/api/generateNutrition') requestMetrics.aiEndpoints.generateNutrition += 1;
+    if (path === '/api/test-gemini') requestMetrics.aiEndpoints.testGemini += 1;
+
+    res.on('finish', () => {
+        const statusClass = getResponseClass(res.statusCode);
+        requestMetrics.responseClasses[statusClass] += 1;
+
+        trackRecentRequest({
+            timestamp: new Date().toISOString(),
+            method,
+            path,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - startTime,
+            rateLimitRemaining: res.getHeader('RateLimit-Remaining') || null,
+            rateLimitLimit: res.getHeader('RateLimit-Limit') || null,
+            rateLimitReset: res.getHeader('RateLimit-Reset') || null
+        });
+    });
+
+    next();
+});
 
 // ---------------------------
 // AUTHENTICATION & ACCOUNT ROUTES
@@ -368,7 +436,7 @@ function validateNutritionData(userData) {
 // UTILITY: CALL GEMINI API
 // ---------------------------
 async function callGeminiAPI(prompt) {
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
@@ -650,6 +718,26 @@ app.get('/health', (req, res) => {
         }
     };
     res.json(checks);
+});
+
+// ---------------------------
+// REQUEST METRICS ENDPOINT
+// ---------------------------
+app.get('/metrics/requests', (req, res) => {
+    res.json({
+        success: true,
+        service: 'SaludPlusAPI',
+        startedAt: requestMetrics.startedAt,
+        uptimeSeconds: Math.floor(process.uptime()),
+        totals: {
+            requests: requestMetrics.totalRequests,
+            byMethod: requestMetrics.byMethod,
+            byPath: requestMetrics.byPath,
+            responseClasses: requestMetrics.responseClasses,
+            aiEndpoints: requestMetrics.aiEndpoints
+        },
+        recentRequests: requestMetrics.recentRequests
+    });
 });
 
 // ---------------------------
