@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import NodeCache from 'node-cache';
+import PQueue from 'p-queue';
 import connectDB from './utils/db.js';
 import authMiddleware from './middleware/auth.js';
 import authRoutes from './routes/auth.js';
@@ -27,6 +28,13 @@ connectDB().then(() => {
 
 // Initialize cache (1 hour TTL for wellness advice)
 const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
+
+// Gemini request queue (prevents hitting Gemini 5 RPM free-tier limit)
+const geminiQueue = new PQueue({
+    concurrency: 1,
+    interval: 60000,
+    intervalCap: 5
+});
 
 // In-memory request metrics for local diagnostics
 const requestMetrics = {
@@ -435,13 +443,14 @@ function validateNutritionData(userData) {
 // ---------------------------
 // UTILITY: CALL GEMINI API
 // ---------------------------
-async function callGeminiAPI(prompt) {
+async function callGeminiAPI(prompt, retries = 2) {
     const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     try {
         console.log('Calling Gemini API...');
+
         const response = await fetch(url, {
             method: "POST",
             headers: {
@@ -449,9 +458,7 @@ async function callGeminiAPI(prompt) {
             },
             body: JSON.stringify({
                 contents: [{
-                    parts: [{
-                        text: prompt
-                    }]
+                    parts: [{ text: prompt }]
                 }]
             }),
             signal: controller.signal
@@ -462,28 +469,31 @@ async function callGeminiAPI(prompt) {
         if (!response.ok) {
             const errorData = await response.text();
             console.error("Gemini API error:", errorData);
+
+            if (response.status === 429 && retries > 0) {
+                console.log("Retrying Gemini request...");
+                await new Promise(r => setTimeout(r, 2000));
+                return callGeminiAPI(prompt, retries - 1);
+            }
+
             const userMessage = getGeminiErrorMessage(response.status, errorData);
             throw new Error(userMessage);
         }
 
         const data = await response.json();
 
-        if (data.candidates && data.candidates.length > 0) {
-            return data.candidates[0].content.parts[0].text;
-        } else {
-            throw new Error('No response generated from Gemini API');
-        }
+        return data.candidates?.[0]?.content?.parts
+            ?.map(p => p.text || "")
+            .join("") || "No response generated";
+
     } catch (err) {
         clearTimeout(timeout);
+
         if (err.name === 'AbortError') {
-            console.error("Gemini API request timeout");
-            throw new Error('Gemini API request timeout (30 seconds). Please try again.');
+            throw new Error('Gemini API request timeout (30 seconds)');
         }
+
         console.error("Gemini API call failed:", err.message || err);
-        // Check if it's a network error
-        if (err.message.includes('fetch failed') || err.message.includes('network')) {
-            throw new Error('Network error: Unable to reach Gemini API. Check your internet connection and API key.');
-        }
         throw err;
     }
 }
@@ -491,8 +501,18 @@ async function callGeminiAPI(prompt) {
 // Cache key generation
 function getCacheKey(type, userData) {
     // Create cache key from user characteristics (not name/personal info)
-    const key = `${type}:${userData.age}:${userData.weight}:${userData.height}:${(userData.conditions || []).sort().join(',')}`;
-    return key;
+    const cleanData = {
+        type,
+        age: userData.age,
+        weight: userData.weight,
+        height: userData.height,
+        conditions: userData.conditions || [],
+        goals: userData.goals || '',
+        fitnessLevel: userData.fitnessLevel || '',
+        dietaryPreferences: userData.dietaryPreferences || ''
+    };
+
+    return Buffer.from(JSON.stringify(cleanData)).toString('base64');
 }
 
 // ---------------------------
@@ -544,7 +564,7 @@ Please provide friendly wellness suggestions in these areas:
 
 Keep the tone friendly, encouraging, and supportive. Focus on general wellness, not medical diagnosis or treatment.`;
 
-        const aiResponse = await callGeminiAPI(prompt);
+        const aiResponse = await geminiQueue.add(() => callGeminiAPI(prompt));
         
         // Cache the response
         cache.set(cacheKey, aiResponse);
@@ -613,7 +633,7 @@ Please provide:
 
 Keep it encouraging and realistic for their fitness level.`;
 
-        const aiResponse = await callGeminiAPI(prompt);
+        const aiResponse = await geminiQueue.add(() => callGeminiAPI(prompt));
         
         // Cache the response
         cache.set(cacheKey, aiResponse);
@@ -682,7 +702,7 @@ Please provide:
 
 Keep recommendations practical, accessible, and non-medical.`;
 
-        const aiResponse = await callGeminiAPI(prompt);
+        const aiResponse = await geminiQueue.add(() => callGeminiAPI(prompt));
         
         // Cache the response
         cache.set(cacheKey, aiResponse);
@@ -753,7 +773,7 @@ app.post('/api/test-gemini', async (req, res) => {
         }
 
         const testPrompt = 'Say "Hello, Gemini API is working!" in one sentence.';
-        const response = await callGeminiAPI(testPrompt);
+        const response = await geminiQueue.add(() => callGeminiAPI(testPrompt));
         
         res.json({ 
             success: true, 
